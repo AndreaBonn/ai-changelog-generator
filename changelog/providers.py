@@ -171,8 +171,11 @@ def _build_gemini(api_key: str, model: str) -> Provider:
         name="gemini",
         api_key=api_key,
         model=model,
-        endpoint=f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
-        headers={"Content-Type": "application/json"},
+        endpoint=f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+        },
         request_builder=_gemini_body,
         response_extractor=_gemini_extract,
     )
