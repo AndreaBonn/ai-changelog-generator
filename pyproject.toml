@@ -9,6 +9,7 @@ packages = ["changelog"]
 name = "ai-changelog-generator"
 version = "1.0.0"
 description = "AI-powered changelog generator GitHub Action"
+license = "Apache-2.0"
 requires-python = ">=3.11"
 dependencies = ["requests>=2.32"]
 

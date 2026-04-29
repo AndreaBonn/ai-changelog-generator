@@ -38,23 +38,25 @@ class Provider:
     model: str
     endpoint: str
     headers: dict[str, str]
-    request_builder: Callable[[str, str, str, float], dict[str, Any]]
+    max_tokens: int
+    request_builder: Callable[[str, str, str, float, int], dict[str, Any]]
     response_extractor: Callable[[dict[str, Any]], str]
+    truncation_checker: Callable[[dict[str, Any]], bool]
 
 
-def get_provider(*, name: str, api_key: str, model: str = "") -> Provider:
+def get_provider(*, name: str, api_key: str, model: str = "", max_tokens: int = 4096) -> Provider:
     """Build a Provider for the given name, applying model override if non-empty."""
     name_lower = name.lower().strip()
     resolved_model = model or DEFAULT_MODELS.get(name_lower, "")
 
     if name_lower == "groq":
-        return _build_groq(api_key, resolved_model)
+        return _build_groq(api_key, resolved_model, max_tokens)
     if name_lower == "gemini":
-        return _build_gemini(api_key, resolved_model)
+        return _build_gemini(api_key, resolved_model, max_tokens)
     if name_lower == "anthropic":
-        return _build_anthropic(api_key, resolved_model)
+        return _build_anthropic(api_key, resolved_model, max_tokens)
     if name_lower == "openai":
-        return _build_openai(api_key, resolved_model)
+        return _build_openai(api_key, resolved_model, max_tokens)
 
     raise LLMError("ALL_PROVIDERS_FAILED", f"Unknown provider: {name}")
 
@@ -101,7 +103,9 @@ def _call_single_provider(
     temperature: float,
 ) -> str:
     """Call a single provider with per-provider retry on 5xx."""
-    body = provider.request_builder(system_prompt, user_prompt, provider.model, temperature)
+    body = provider.request_builder(
+        system_prompt, user_prompt, provider.model, temperature, provider.max_tokens
+    )
 
     for attempt in range(LLM_MAX_RETRIES):
         try:
@@ -142,6 +146,14 @@ def _call_single_provider(
             )
 
         data: dict[str, Any] = resp.json()
+        if provider.truncation_checker(data):
+            log.warning(
+                "LLM %s/%s output was truncated (hit max_tokens=%d). "
+                "Consider increasing MAX_TOKENS.",
+                provider.name,
+                provider.model,
+                provider.max_tokens,
+            )
         return provider.response_extractor(data)
 
     # Unreachable: every loop iteration terminates via return, raise, or continue
@@ -151,7 +163,7 @@ def _call_single_provider(
     )  # pragma: no cover
 
 
-def _build_groq(api_key: str, model: str) -> Provider:
+def _build_groq(api_key: str, model: str, max_tokens: int) -> Provider:
     return Provider(
         name="groq",
         api_key=api_key,
@@ -161,12 +173,14 @@ def _build_groq(api_key: str, model: str) -> Provider:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
+        max_tokens=max_tokens,
         request_builder=_openai_compatible_body,
         response_extractor=_openai_compatible_extract,
+        truncation_checker=_openai_compatible_truncated,
     )
 
 
-def _build_gemini(api_key: str, model: str) -> Provider:
+def _build_gemini(api_key: str, model: str, max_tokens: int) -> Provider:
     return Provider(
         name="gemini",
         api_key=api_key,
@@ -176,12 +190,14 @@ def _build_gemini(api_key: str, model: str) -> Provider:
             "Content-Type": "application/json",
             "x-goog-api-key": api_key,
         },
+        max_tokens=max_tokens,
         request_builder=_gemini_body,
         response_extractor=_gemini_extract,
+        truncation_checker=_gemini_truncated,
     )
 
 
-def _build_anthropic(api_key: str, model: str) -> Provider:
+def _build_anthropic(api_key: str, model: str, max_tokens: int) -> Provider:
     return Provider(
         name="anthropic",
         api_key=api_key,
@@ -192,12 +208,14 @@ def _build_anthropic(api_key: str, model: str) -> Provider:
             "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
         },
+        max_tokens=max_tokens,
         request_builder=_anthropic_body,
         response_extractor=_anthropic_extract,
+        truncation_checker=_anthropic_truncated,
     )
 
 
-def _build_openai(api_key: str, model: str) -> Provider:
+def _build_openai(api_key: str, model: str, max_tokens: int) -> Provider:
     return Provider(
         name="openai",
         api_key=api_key,
@@ -207,13 +225,15 @@ def _build_openai(api_key: str, model: str) -> Provider:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
+        max_tokens=max_tokens,
         request_builder=_openai_compatible_body,
         response_extractor=_openai_compatible_extract,
+        truncation_checker=_openai_compatible_truncated,
     )
 
 
 def _openai_compatible_body(
-    system: str, user: str, model: str, temperature: float
+    system: str, user: str, model: str, temperature: float, max_tokens: int
 ) -> dict[str, Any]:
     return {
         "model": model,
@@ -221,31 +241,62 @@ def _openai_compatible_body(
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        "max_tokens": 2048,
+        "max_tokens": max_tokens,
         "temperature": temperature,
     }
 
 
 def _openai_compatible_extract(data: dict[str, Any]) -> str:
-    return str(data["choices"][0]["message"]["content"])
+    try:
+        return str(data["choices"][0]["message"]["content"])
+    except (KeyError, IndexError, TypeError) as exc:
+        raise LLMError(
+            "LLM_RESPONSE_PARSE",
+            f"Unexpected OpenAI-compatible response structure: {exc}. "
+            f"Top-level keys: {list(data.keys())}",
+        ) from exc
 
 
-def _gemini_body(system: str, user: str, model: str, temperature: float) -> dict[str, Any]:
+def _openai_compatible_truncated(data: dict[str, Any]) -> bool:
+    choices = data.get("choices", [])
+    if choices:
+        return str(choices[0].get("finish_reason", "")) == "length"
+    return False
+
+
+def _gemini_body(
+    system: str, user: str, model: str, temperature: float, max_tokens: int
+) -> dict[str, Any]:
     return {
         "system_instruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": user}]}],
-        "generationConfig": {"maxOutputTokens": 2048, "temperature": temperature},
+        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
     }
 
 
 def _gemini_extract(data: dict[str, Any]) -> str:
-    return str(data["candidates"][0]["content"]["parts"][0]["text"])
+    try:
+        return str(data["candidates"][0]["content"]["parts"][0]["text"])
+    except (KeyError, IndexError, TypeError) as exc:
+        raise LLMError(
+            "LLM_RESPONSE_PARSE",
+            f"Unexpected Gemini response structure: {exc}. Top-level keys: {list(data.keys())}",
+        ) from exc
 
 
-def _anthropic_body(system: str, user: str, model: str, temperature: float) -> dict[str, Any]:
+def _gemini_truncated(data: dict[str, Any]) -> bool:
+    candidates = data.get("candidates", [])
+    if candidates:
+        return str(candidates[0].get("finishReason", "")) == "MAX_TOKENS"
+    return False
+
+
+def _anthropic_body(
+    system: str, user: str, model: str, temperature: float, max_tokens: int
+) -> dict[str, Any]:
     return {
         "model": model,
-        "max_tokens": 2048,
+        "max_tokens": max_tokens,
         "temperature": temperature,
         "system": system,
         "messages": [{"role": "user", "content": user}],
@@ -253,4 +304,14 @@ def _anthropic_body(system: str, user: str, model: str, temperature: float) -> d
 
 
 def _anthropic_extract(data: dict[str, Any]) -> str:
-    return str(data["content"][0]["text"])
+    try:
+        return str(data["content"][0]["text"])
+    except (KeyError, IndexError, TypeError) as exc:
+        raise LLMError(
+            "LLM_RESPONSE_PARSE",
+            f"Unexpected Anthropic response structure: {exc}. Top-level keys: {list(data.keys())}",
+        ) from exc
+
+
+def _anthropic_truncated(data: dict[str, Any]) -> bool:
+    return str(data.get("stop_reason", "")) == "max_tokens"
