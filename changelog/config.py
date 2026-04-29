@@ -13,7 +13,7 @@ log = logging.getLogger("ai-changelog-generator")
 SUPPORTED_LANGUAGES = frozenset({"english", "italian", "french", "spanish", "german"})
 
 
-@dataclass
+@dataclass(frozen=True)
 class Config:
     """Immutable configuration loaded from environment variables."""
 
