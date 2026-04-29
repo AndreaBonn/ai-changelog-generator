@@ -243,6 +243,7 @@ def _anthropic_body(system: str, user: str, model: str, temperature: float) -> d
     return {
         "model": model,
         "max_tokens": 2048,
+        "temperature": temperature,
         "system": system,
         "messages": [{"role": "user", "content": user}],
     }
