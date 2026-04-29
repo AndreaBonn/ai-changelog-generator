@@ -177,3 +177,18 @@ class TestResponseExtractors:
         p = get_provider(name="anthropic", api_key="key1")
         text = p.response_extractor({"content": [{"text": "claude says"}]})
         assert text == "claude says"
+
+    def test_openai_compatible_malformed_raises_llm_error(self) -> None:
+        p = get_provider(name="groq", api_key="key1")
+        with pytest.raises(LLMError, match="LLM_RESPONSE_PARSE"):
+            p.response_extractor({"unexpected": "structure"})
+
+    def test_gemini_malformed_raises_llm_error(self) -> None:
+        p = get_provider(name="gemini", api_key="key1")
+        with pytest.raises(LLMError, match="LLM_RESPONSE_PARSE"):
+            p.response_extractor({"candidates": []})
+
+    def test_anthropic_malformed_raises_llm_error(self) -> None:
+        p = get_provider(name="anthropic", api_key="key1")
+        with pytest.raises(LLMError, match="LLM_RESPONSE_PARSE"):
+            p.response_extractor({})

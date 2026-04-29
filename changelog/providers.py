@@ -247,7 +247,14 @@ def _openai_compatible_body(
 
 
 def _openai_compatible_extract(data: dict[str, Any]) -> str:
-    return str(data["choices"][0]["message"]["content"])
+    try:
+        return str(data["choices"][0]["message"]["content"])
+    except (KeyError, IndexError, TypeError) as exc:
+        raise LLMError(
+            "LLM_RESPONSE_PARSE",
+            f"Unexpected OpenAI-compatible response structure: {exc}. "
+            f"Top-level keys: {list(data.keys())}",
+        ) from exc
 
 
 def _openai_compatible_truncated(data: dict[str, Any]) -> bool:
@@ -268,7 +275,13 @@ def _gemini_body(
 
 
 def _gemini_extract(data: dict[str, Any]) -> str:
-    return str(data["candidates"][0]["content"]["parts"][0]["text"])
+    try:
+        return str(data["candidates"][0]["content"]["parts"][0]["text"])
+    except (KeyError, IndexError, TypeError) as exc:
+        raise LLMError(
+            "LLM_RESPONSE_PARSE",
+            f"Unexpected Gemini response structure: {exc}. Top-level keys: {list(data.keys())}",
+        ) from exc
 
 
 def _gemini_truncated(data: dict[str, Any]) -> bool:
@@ -291,7 +304,13 @@ def _anthropic_body(
 
 
 def _anthropic_extract(data: dict[str, Any]) -> str:
-    return str(data["content"][0]["text"])
+    try:
+        return str(data["content"][0]["text"])
+    except (KeyError, IndexError, TypeError) as exc:
+        raise LLMError(
+            "LLM_RESPONSE_PARSE",
+            f"Unexpected Anthropic response structure: {exc}. Top-level keys: {list(data.keys())}",
+        ) from exc
 
 
 def _anthropic_truncated(data: dict[str, Any]) -> bool:
