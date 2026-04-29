@@ -104,6 +104,61 @@ class TestEvaluator:
         assert result == "original"
 
     @patch("changelog.evaluator.call_llm_with_fallback")
+    def test_regeneration_failure_returns_previous_body(self, mock_llm: MagicMock) -> None:
+        mock_llm.side_effect = [
+            '{"ok": false, "feedback": "bad", "missing": ["X"]}',
+            Exception("LLM down during regen"),
+        ]
+        evaluator = Evaluator(provider_chain=_chain())
+        result = evaluator.evaluate_and_refine(
+            changelog_body="original",
+            classified=_classified(),
+            language="english",
+            max_retries=1,
+        )
+        assert result == "original"
+
+    @patch("changelog.evaluator.call_llm_with_fallback")
+    def test_markdown_fenced_json_parsed_correctly(self, mock_llm: MagicMock) -> None:
+        mock_llm.return_value = '```json\n{"ok": true, "feedback": "", "missing": []}\n```'
+        evaluator = Evaluator(provider_chain=_chain())
+        result = evaluator.evaluate_and_refine(
+            changelog_body="original",
+            classified=_classified(),
+            language="english",
+            max_retries=1,
+        )
+        assert result == "original"
+
+    @patch("changelog.evaluator.call_llm_with_fallback")
+    def test_markdown_fenced_without_closing_backticks(self, mock_llm: MagicMock) -> None:
+        mock_llm.return_value = '```json\n{"ok": true, "feedback": "", "missing": []}\n'
+        evaluator = Evaluator(provider_chain=_chain())
+        result = evaluator.evaluate_and_refine(
+            changelog_body="original",
+            classified=_classified(),
+            language="english",
+            max_retries=1,
+        )
+        assert result == "original"
+
+    @patch("changelog.evaluator.call_llm_with_fallback")
+    def test_markdown_fenced_not_ok_triggers_regen(self, mock_llm: MagicMock) -> None:
+        mock_llm.side_effect = [
+            '```\n{"ok": false, "feedback": "missing stuff", "missing": ["A"]}\n```',
+            "regenerated body",
+            '{"ok": true, "feedback": "", "missing": []}',
+        ]
+        evaluator = Evaluator(provider_chain=_chain())
+        result = evaluator.evaluate_and_refine(
+            changelog_body="original",
+            classified=_classified(),
+            language="english",
+            max_retries=1,
+        )
+        assert result == "regenerated body"
+
+    @patch("changelog.evaluator.call_llm_with_fallback")
     def test_feedback_passed_to_regeneration(self, mock_llm: MagicMock) -> None:
         mock_llm.side_effect = [
             '{"ok": false, "feedback": "missing breaking change", "missing": ["API v1"]}',

@@ -95,6 +95,21 @@ class TestOtherCategories:
         result = classifier.classify([_commit("chore: update deps")], [])
         assert len(result.chore) == 1
 
+    def test_perf_via_pr_label(self) -> None:
+        classifier = Classifier()
+        result = classifier.classify([], [_pr("speed up query", labels=["performance"])])
+        assert len(result.performance) == 1
+
+    def test_chore_via_pr_label(self) -> None:
+        classifier = Classifier()
+        result = classifier.classify([], [_pr("bump deps", labels=["dependencies"])])
+        assert len(result.chore) == 1
+
+    def test_docs_via_commit_doc_prefix(self) -> None:
+        classifier = Classifier()
+        result = classifier.classify([_commit("doc: update API guide")], [])
+        assert len(result.docs) == 1
+
     def test_refactor_via_commit(self) -> None:
         classifier = Classifier()
         result = classifier.classify([_commit("refactor: extract helper")], [])

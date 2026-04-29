@@ -144,7 +144,11 @@ def _call_single_provider(
         data: dict[str, Any] = resp.json()
         return provider.response_extractor(data)
 
-    raise LLMError("ALL_PROVIDERS_FAILED", f"{provider.name}: max retries exhausted")
+    # Unreachable: every loop iteration terminates via return, raise, or continue
+    # with the last attempt always raising directly.
+    raise LLMError(
+        "ALL_PROVIDERS_FAILED", f"{provider.name}: max retries exhausted"
+    )  # pragma: no cover
 
 
 def _build_groq(api_key: str, model: str) -> Provider:

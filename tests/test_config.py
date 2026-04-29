@@ -94,3 +94,33 @@ class TestConfigFromEnv:
         with patch.dict(os.environ, env, clear=True):
             cfg = Config.from_env()
         assert cfg.max_eval_retries == 0
+
+    def test_missing_repo_raises(self) -> None:
+        env = {**MINIMAL_ENV}
+        del env["REPO_FULL_NAME"]
+        with patch.dict(os.environ, env, clear=True), pytest.raises(ConfigError) as exc_info:
+            Config.from_env()
+        assert "REPO_FULL_NAME" in exc_info.value.message
+
+    def test_invalid_max_eval_retries_string_raises(self) -> None:
+        env = {**MINIMAL_ENV, "MAX_EVAL_RETRIES": "xyz"}
+        with patch.dict(os.environ, env, clear=True), pytest.raises(ConfigError) as exc_info:
+            Config.from_env()
+        assert "non-negative integer" in exc_info.value.message
+
+    def test_negative_max_eval_retries_raises(self) -> None:
+        env = {**MINIMAL_ENV, "MAX_EVAL_RETRIES": "-1"}
+        with patch.dict(os.environ, env, clear=True), pytest.raises(ConfigError) as exc_info:
+            Config.from_env()
+        assert "non-negative" in exc_info.value.message
+
+    def test_release_name_defaults_to_tag(self) -> None:
+        with patch.dict(os.environ, MINIMAL_ENV, clear=True):
+            cfg = Config.from_env()
+        assert cfg.release_name == "v1.0.0"
+
+    def test_release_name_from_env(self) -> None:
+        env = {**MINIMAL_ENV, "RELEASE_NAME": "Release 1.0"}
+        with patch.dict(os.environ, env, clear=True):
+            cfg = Config.from_env()
+        assert cfg.release_name == "Release 1.0"

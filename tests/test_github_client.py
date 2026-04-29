@@ -35,6 +35,19 @@ class TestGetPreviousTag:
             result = client.get_previous_tag("v1.1.0")
         assert result == "v1.0.0"
 
+    def test_returns_tag_across_page_boundary(self) -> None:
+        client = _make_client()
+        page1 = [{"name": "v1.1.0"}]
+        page2 = [{"name": "v1.0.0"}]
+        responses = [
+            _mock_response(json_data=page1),
+            _mock_response(json_data=page2),
+            _mock_response(json_data=[]),
+        ]
+        with patch.object(client._session, "request", side_effect=responses):
+            result = client.get_previous_tag("v1.1.0")
+        assert result == "v1.0.0"
+
     def test_returns_none_for_first_release(self) -> None:
         client = _make_client()
         tags = [{"name": "v1.0.0"}]
@@ -264,3 +277,141 @@ class TestFileOperations:
             client._session, "request", return_value=_mock_response(json_data={"content": {}})
         ):
             client.update_file_contents("CHANGELOG.md", "content", None, "commit msg")
+
+
+class TestGetMergedPrsBaseNone:
+    def test_uses_commits_endpoint_when_base_is_none(self) -> None:
+        client = _make_client()
+        commits_data = [{"sha": "aaa"}]
+        pr_data = [
+            {
+                "number": 5,
+                "title": "feat: init",
+                "body": "",
+                "labels": [{"name": "feat"}],
+                "html_url": "",
+                "user": {"login": "dev"},
+                "merged_at": "2024-01-01T00:00:00Z",
+            }
+        ]
+        responses = [
+            _mock_response(json_data=commits_data),
+            _mock_response(json_data=pr_data),
+        ]
+        with patch.object(client._session, "request", side_effect=responses) as mock_req:
+            result = client.get_merged_prs(None, "v1.0.0", max_prs=30)
+        assert len(result) == 1
+        assert result[0].number == 5
+        first_call_url = mock_req.call_args_list[0][0][1]
+        assert "/commits" in first_call_url
+        assert "compare" not in first_call_url
+
+
+class TestMaxPrsTruncation:
+    def test_stops_collecting_prs_at_max(self) -> None:
+        client = _make_client()
+        compare_data = {"commits": [{"sha": "aaa"}, {"sha": "bbb"}, {"sha": "ccc"}]}
+
+        def make_pr(num: int) -> list[dict[str, object]]:
+            return [
+                {
+                    "number": num,
+                    "title": f"PR {num}",
+                    "body": "",
+                    "labels": [],
+                    "html_url": "",
+                    "user": {"login": "dev"},
+                    "merged_at": "2024-01-01",
+                }
+            ]
+
+        responses = [
+            _mock_response(json_data=compare_data),
+            _mock_response(json_data=make_pr(1)),
+            _mock_response(json_data=make_pr(2)),
+        ]
+        with patch.object(client._session, "request", side_effect=responses):
+            result = client.get_merged_prs("v1.0", "v1.1", max_prs=2)
+        assert len(result) == 2
+
+
+class TestErrorReraise:
+    def test_get_or_create_release_reraises_non_404(self) -> None:
+        client = _make_client()
+        resp_500 = _mock_response(status_code=500, json_data={})
+        with (
+            patch.object(client._session, "request", return_value=resp_500),
+            patch("changelog.github_client.time.sleep"),
+            pytest.raises(GitHubAPIError) as exc_info,
+        ):
+            client.get_or_create_release_by_tag("v1.0.0", "body")
+        assert exc_info.value.code == "GITHUB_API_ERROR"
+
+    def test_get_file_contents_reraises_non_404(self) -> None:
+        client = _make_client()
+        resp_403 = _mock_response(status_code=403, json_data={})
+        resp_403.text = "Forbidden"
+        resp_403.headers = {}
+        with (
+            patch.object(client._session, "request", return_value=resp_403),
+            pytest.raises(GitHubAPIError),
+        ):
+            client.get_file_contents("SECRET.md")
+
+
+class TestConnectionRetry:
+    @patch("changelog.github_client.time.sleep")
+    def test_connection_error_retries_then_succeeds(self, mock_sleep: MagicMock) -> None:
+        import requests as req
+
+        client = _make_client()
+        tags = [{"name": "v1.0.0"}]
+        responses = [
+            req.ConnectionError("down"),
+            _mock_response(json_data=tags),
+            _mock_response(json_data=[]),
+        ]
+        with patch.object(client._session, "request", side_effect=responses):
+            result = client.get_previous_tag("v1.0.0")
+        assert result is None
+        assert mock_sleep.call_count == 1
+
+    @patch("changelog.github_client.time.sleep")
+    def test_connection_error_exhausts_retries(self, mock_sleep: MagicMock) -> None:
+        import requests as req
+
+        client = _make_client()
+        with (
+            patch.object(
+                client._session,
+                "request",
+                side_effect=req.ConnectionError("always down"),
+            ),
+            pytest.raises(GitHubAPIError) as exc_info,
+        ):
+            client.get_previous_tag("v1.0.0")
+        assert "retries exhausted" in exc_info.value.message
+
+
+class TestTypeGuards:
+    def test_get_dict_raises_when_api_returns_list(self) -> None:
+        client = _make_client()
+        with (
+            patch.object(
+                client._session, "request", return_value=_mock_response(json_data=[{"a": 1}])
+            ),
+            pytest.raises(GitHubAPIError) as exc_info,
+        ):
+            client._get_dict("/repos/owner/repo/releases/tags/v1")
+        assert "Expected dict" in exc_info.value.message
+
+    def test_get_list_raises_when_api_returns_dict(self) -> None:
+        client = _make_client()
+        with (
+            patch.object(
+                client._session, "request", return_value=_mock_response(json_data={"a": 1})
+            ),
+            pytest.raises(GitHubAPIError) as exc_info,
+        ):
+            client._get_list("/repos/owner/repo/tags")
+        assert "Expected list" in exc_info.value.message
