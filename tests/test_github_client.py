@@ -195,3 +195,72 @@ class TestHttpBehaviour:
         ):
             client.get_previous_tag("v1.0.0")
         assert exc_info.value.code == "RATE_LIMITED"
+
+
+class TestReleaseOperations:
+    def test_update_release_body_calls_patch(self) -> None:
+        client = _make_client()
+        with patch.object(
+            client._session, "request", return_value=_mock_response(json_data={"id": 42})
+        ) as mock_req:
+            client.update_release_body("42", "new body")
+        assert mock_req.call_count == 1
+        assert mock_req.call_args[0][0] == "PATCH"
+
+    def test_get_or_create_release_updates_existing(self) -> None:
+        client = _make_client()
+        responses = [
+            _mock_response(json_data={"id": 99}),
+            _mock_response(json_data={"id": 99}),
+        ]
+        with patch.object(client._session, "request", side_effect=responses):
+            client.get_or_create_release_by_tag("v1.0.0", "body")
+
+    def test_get_or_create_release_creates_when_404(self) -> None:
+        client = _make_client()
+        resp_404 = _mock_response(status_code=404, json_data={})
+        resp_404.text = "Not Found"
+        resp_created = _mock_response(json_data={"id": 100})
+        with patch.object(client._session, "request", side_effect=[resp_404, resp_created]):
+            client.get_or_create_release_by_tag("v1.0.0", "body")
+
+
+class TestFileOperations:
+    def test_get_file_contents_returns_decoded(self) -> None:
+        import base64
+
+        content = base64.b64encode(b"hello world").decode()
+        client = _make_client()
+        with patch.object(
+            client._session,
+            "request",
+            return_value=_mock_response(json_data={"content": content, "sha": "abc"}),
+        ):
+            decoded, sha = client.get_file_contents("README.md")
+        assert decoded == "hello world"
+        assert sha == "abc"
+
+    def test_get_file_contents_returns_empty_on_404(self) -> None:
+        client = _make_client()
+        resp_404 = _mock_response(status_code=404, json_data={})
+        resp_404.text = "Not Found"
+        with patch.object(client._session, "request", return_value=resp_404):
+            decoded, sha = client.get_file_contents("MISSING.md")
+        assert decoded == ""
+        assert sha == ""
+
+    def test_update_file_contents_with_sha(self) -> None:
+        client = _make_client()
+        with patch.object(
+            client._session, "request", return_value=_mock_response(json_data={"content": {}})
+        ) as mock_req:
+            client.update_file_contents("CHANGELOG.md", "content", "sha123", "commit msg")
+        assert mock_req.call_count == 1
+        assert mock_req.call_args[0][0] == "PUT"
+
+    def test_update_file_contents_without_sha(self) -> None:
+        client = _make_client()
+        with patch.object(
+            client._session, "request", return_value=_mock_response(json_data={"content": {}})
+        ):
+            client.update_file_contents("CHANGELOG.md", "content", None, "commit msg")
