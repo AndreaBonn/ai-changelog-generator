@@ -171,7 +171,7 @@ class GitHubClient:
             release_id = str(data["id"])
             self.update_release_body(release_id, body)
         except GitHubAPIError as exc:
-            if "404" not in exc.message:
+            if exc.status_code != 404:
                 raise
             self._request(
                 "POST",
@@ -184,7 +184,7 @@ class GitHubClient:
         try:
             data = self._get_dict(f"/repos/{self.repo}/contents/{path}")
         except GitHubAPIError as exc:
-            if "404" not in exc.message:
+            if exc.status_code != 404:
                 raise
             return ("", "")
         content_b64: str = data.get("content", "")
@@ -250,12 +250,14 @@ class GitHubClient:
                 raise GitHubAPIError(
                     "RATE_LIMITED",
                     f"GitHub rate limit exceeded. Resets at {reset_at}",
+                    status_code=403,
                 )
 
             if resp.status_code >= 500:
                 last_exc = GitHubAPIError(
                     "GITHUB_API_ERROR",
                     f"{method} {path} returned {resp.status_code}",
+                    status_code=resp.status_code,
                 )
                 log.warning("GitHub API %d on %s (attempt %d)", resp.status_code, path, attempt + 1)
                 time.sleep(BACKOFF_BASE * (2**attempt))
@@ -265,6 +267,7 @@ class GitHubClient:
                 raise GitHubAPIError(
                     "GITHUB_API_ERROR",
                     f"{method} {path} returned {resp.status_code}: {resp.text[:200]}",
+                    status_code=resp.status_code,
                 )
 
             return resp.json()  # type: ignore[no-any-return]

@@ -42,6 +42,11 @@ class TestGetProvider:
         assert "system_instruction" in body
         assert body["contents"][0]["role"] == "user"
 
+    def test_gemini_api_key_in_header_not_url(self) -> None:
+        p = get_provider(name="gemini", api_key="secret-key")
+        assert "secret-key" not in p.endpoint
+        assert p.headers["x-goog-api-key"] == "secret-key"
+
     def test_anthropic_request_body_structure(self) -> None:
         p = get_provider(name="anthropic", api_key="key1")
         body = p.request_builder("sys", "user", p.model, 0.3)

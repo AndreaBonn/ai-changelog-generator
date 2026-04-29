@@ -19,6 +19,10 @@ class ConfigError(ChangelogError):
 class GitHubAPIError(ChangelogError):
     """GitHub API returned a non-2xx response."""
 
+    def __init__(self, code: str, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(code, message)
+        self.status_code = status_code
+
 
 class LLMError(ChangelogError):
     """LLM provider call failed."""
