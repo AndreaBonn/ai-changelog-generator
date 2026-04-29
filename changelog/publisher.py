@@ -46,4 +46,6 @@ class Publisher:
             )
             log.info("Committed %s for %s.", path, release_tag)
         except Exception:
-            log.warning("Failed to update %s — release body was already published.", path)
+            log.warning(
+                "Failed to update %s — release body was already published.", path, exc_info=True
+            )
