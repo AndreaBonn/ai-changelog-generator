@@ -29,7 +29,7 @@ FULL_ENV = {
 
 
 class TestMainHappyPath:
-    @patch("changelog.providers.requests.post")
+    @patch("changelog.providers._session.post")
     @patch("changelog.github_client.GitHubClient._request")
     def test_full_pipeline_generates_and_publishes(
         self,
@@ -104,7 +104,7 @@ class TestEarlyExit:
 
 
 class TestEvalSkip:
-    @patch("changelog.providers.requests.post")
+    @patch("changelog.providers._session.post")
     @patch("changelog.github_client.GitHubClient._request")
     def test_skips_evaluation_when_retries_zero(
         self,

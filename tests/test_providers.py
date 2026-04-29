@@ -70,7 +70,7 @@ class TestGetProvider:
 
 
 class TestCallLlmWithFallback:
-    @patch("changelog.providers.requests.post")
+    @patch("changelog.providers._session.post")
     def test_returns_text_on_success(self, mock_post: MagicMock) -> None:
         mock_post.return_value = _mock_response(
             json_data={"choices": [{"message": {"content": "changelog text"}}]}
@@ -79,7 +79,7 @@ class TestCallLlmWithFallback:
         result = call_llm_with_fallback(_make_chain([p]), user="generate")
         assert result == "changelog text"
 
-    @patch("changelog.providers.requests.post")
+    @patch("changelog.providers._session.post")
     def test_fallback_on_500(self, mock_post: MagicMock) -> None:
         p1 = get_provider(name="groq", api_key="key1")
         p2 = get_provider(name="openai", api_key="key2")
@@ -92,7 +92,7 @@ class TestCallLlmWithFallback:
             result = call_llm_with_fallback(_make_chain([p1, p2]), user="generate")
         assert result == "fallback ok"
 
-    @patch("changelog.providers.requests.post")
+    @patch("changelog.providers._session.post")
     def test_fallback_on_connection_error(self, mock_post: MagicMock) -> None:
         p1 = get_provider(name="groq", api_key="key1")
         p2 = get_provider(name="openai", api_key="key2")
@@ -105,7 +105,7 @@ class TestCallLlmWithFallback:
             result = call_llm_with_fallback(_make_chain([p1, p2]), user="generate")
         assert result == "recovered"
 
-    @patch("changelog.providers.requests.post")
+    @patch("changelog.providers._session.post")
     def test_no_retry_on_4xx(self, mock_post: MagicMock) -> None:
         p1 = get_provider(name="groq", api_key="key1")
         p2 = get_provider(name="openai", api_key="key2")
@@ -117,7 +117,7 @@ class TestCallLlmWithFallback:
         assert result == "ok"
         assert mock_post.call_count == 2
 
-    @patch("changelog.providers.requests.post")
+    @patch("changelog.providers._session.post")
     def test_raises_when_all_fail(self, mock_post: MagicMock) -> None:
         p = get_provider(name="groq", api_key="key1")
         mock_post.return_value = _mock_response(status_code=401)
@@ -125,7 +125,7 @@ class TestCallLlmWithFallback:
             call_llm_with_fallback(_make_chain([p]), user="generate")
         assert exc_info.value.code == "ALL_PROVIDERS_FAILED"
 
-    @patch("changelog.providers.requests.post")
+    @patch("changelog.providers._session.post")
     def test_empty_response_triggers_fallback(self, mock_post: MagicMock) -> None:
         p1 = get_provider(name="groq", api_key="key1")
         p2 = get_provider(name="openai", api_key="key2")
@@ -136,7 +136,7 @@ class TestCallLlmWithFallback:
         result = call_llm_with_fallback(_make_chain([p1, p2]), user="generate")
         assert result == "real content"
 
-    @patch("changelog.providers.requests.post")
+    @patch("changelog.providers._session.post")
     def test_rate_limit_429_triggers_fallback(self, mock_post: MagicMock) -> None:
         p1 = get_provider(name="gemini", api_key="key1")
         p2 = get_provider(name="groq", api_key="key2")
@@ -147,7 +147,7 @@ class TestCallLlmWithFallback:
         result = call_llm_with_fallback(_make_chain([p1, p2]), user="generate")
         assert result == "from groq"
 
-    @patch("changelog.providers.requests.post")
+    @patch("changelog.providers._session.post")
     def test_rate_limit_429_no_retry_within_provider(self, mock_post: MagicMock) -> None:
         p1 = get_provider(name="gemini", api_key="key1")
         p2 = get_provider(name="groq", api_key="key2")
@@ -158,6 +158,71 @@ class TestCallLlmWithFallback:
         result = call_llm_with_fallback(_make_chain([p1, p2]), user="generate")
         assert mock_post.call_count == 2
         assert result == "ok"
+
+
+class TestNonRetryableStatusCodes:
+    @patch("changelog.providers._session.post")
+    def test_401_fails_immediately_no_retry(self, mock_post: MagicMock) -> None:
+        p = get_provider(name="groq", api_key="bad-key")
+        mock_post.return_value = _mock_response(status_code=401)
+        with pytest.raises(LLMError):
+            call_llm_with_fallback(_make_chain([p]), user="generate")
+        assert mock_post.call_count == 1
+
+    @patch("changelog.providers._session.post")
+    def test_403_fails_immediately_no_retry(self, mock_post: MagicMock) -> None:
+        p = get_provider(name="groq", api_key="key1")
+        mock_post.return_value = _mock_response(status_code=403)
+        with pytest.raises(LLMError):
+            call_llm_with_fallback(_make_chain([p]), user="generate")
+        assert mock_post.call_count == 1
+
+    @patch("changelog.providers._session.post")
+    def test_413_fails_immediately_no_retry(self, mock_post: MagicMock) -> None:
+        p = get_provider(name="groq", api_key="key1")
+        mock_post.return_value = _mock_response(status_code=413)
+        with pytest.raises(LLMError):
+            call_llm_with_fallback(_make_chain([p]), user="generate")
+        assert mock_post.call_count == 1
+
+    @patch("changelog.providers._session.post")
+    def test_non_retryable_falls_back_to_next_provider(self, mock_post: MagicMock) -> None:
+        p1 = get_provider(name="groq", api_key="bad-key")
+        p2 = get_provider(name="openai", api_key="good-key")
+        mock_post.side_effect = [
+            _mock_response(status_code=401),
+            _mock_response(json_data={"choices": [{"message": {"content": "ok"}}]}),
+        ]
+        result = call_llm_with_fallback(_make_chain([p1, p2]), user="generate")
+        assert result == "ok"
+        assert mock_post.call_count == 2
+
+
+class TestExponentialBackoff:
+    @patch("changelog.providers.time.sleep")
+    @patch("changelog.providers._session.post")
+    def test_backoff_increases_on_5xx(self, mock_post: MagicMock, mock_sleep: MagicMock) -> None:
+        p = get_provider(name="groq", api_key="key1")
+        mock_post.side_effect = [
+            _mock_response(status_code=500),
+            _mock_response(status_code=500),
+            _mock_response(json_data={"choices": [{"message": {"content": "ok"}}]}),
+        ]
+        call_llm_with_fallback(_make_chain([p]), user="generate")
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert delays == [2, 4]
+
+    @patch("changelog.providers.time.sleep")
+    @patch("changelog.providers._session.post")
+    def test_backoff_on_connection_error(self, mock_post: MagicMock, mock_sleep: MagicMock) -> None:
+        p = get_provider(name="groq", api_key="key1")
+        mock_post.side_effect = [
+            requests.ConnectionError("down"),
+            _mock_response(json_data={"choices": [{"message": {"content": "ok"}}]}),
+        ]
+        call_llm_with_fallback(_make_chain([p]), user="generate")
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert delays == [2]
 
 
 class TestResponseExtractors:

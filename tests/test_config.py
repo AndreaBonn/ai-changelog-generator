@@ -124,3 +124,34 @@ class TestConfigFromEnv:
         with patch.dict(os.environ, env, clear=True):
             cfg = Config.from_env()
         assert cfg.release_name == "Release 1.0"
+
+
+class TestConfigRepr:
+    def test_repr_redacts_github_token(self) -> None:
+        with patch.dict(os.environ, MINIMAL_ENV, clear=True):
+            cfg = Config.from_env()
+        result = repr(cfg)
+        assert "ghp_test123" not in result
+        assert "REDACTED" in result
+
+    def test_repr_redacts_api_keys(self) -> None:
+        with patch.dict(os.environ, MINIMAL_ENV, clear=True):
+            cfg = Config.from_env()
+        result = repr(cfg)
+        assert "key1" not in result
+        assert "1 REDACTED" in result
+
+    def test_repr_shows_non_secret_fields(self) -> None:
+        with patch.dict(os.environ, MINIMAL_ENV, clear=True):
+            cfg = Config.from_env()
+        result = repr(cfg)
+        assert "owner/repo" in result
+        assert "v1.0.0" in result
+        assert "groq" in result
+
+    def test_repr_multi_key_count(self) -> None:
+        env = {**MINIMAL_ENV, "LLM_PROVIDER": "groq,gemini", "LLM_API_KEY": "k1,k2"}
+        with patch.dict(os.environ, env, clear=True):
+            cfg = Config.from_env()
+        result = repr(cfg)
+        assert "2 REDACTED" in result

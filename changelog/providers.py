@@ -15,8 +15,10 @@ from changelog.exceptions import LLMError
 log = logging.getLogger("ai-changelog-generator")
 
 LLM_TIMEOUT = 60
-LLM_MAX_RETRIES = 2
-LLM_RETRY_DELAY = 2
+LLM_MAX_RETRIES = 3
+LLM_BACKOFF_BASE = 2
+
+_NON_RETRYABLE_STATUS_CODES = frozenset({401, 403, 413})
 
 GENERATION_TEMPERATURE = 0.3
 EVALUATION_TEMPERATURE = 0.1
@@ -95,6 +97,9 @@ class _RateLimitError(Exception):
     """Internal signal for rate limit responses — triggers fallback to next provider."""
 
 
+_session = requests.Session()
+
+
 def _call_single_provider(
     provider: Provider,
     *,
@@ -109,7 +114,7 @@ def _call_single_provider(
 
     for attempt in range(LLM_MAX_RETRIES):
         try:
-            resp = requests.post(
+            resp = _session.post(
                 provider.endpoint,
                 headers=provider.headers,
                 json=body,
@@ -117,12 +122,18 @@ def _call_single_provider(
             )
         except requests.RequestException:
             if attempt < LLM_MAX_RETRIES - 1:
-                time.sleep(LLM_RETRY_DELAY)
+                time.sleep(LLM_BACKOFF_BASE * (2**attempt))
                 continue
             raise
 
         if resp.status_code == 429:
             raise _RateLimitError(f"HTTP 429 from {provider.name}")
+
+        if resp.status_code in _NON_RETRYABLE_STATUS_CODES:
+            raise LLMError(
+                "ALL_PROVIDERS_FAILED",
+                f"{provider.name} returned {resp.status_code}: {resp.text[:200]}",
+            )
 
         if resp.status_code >= 500:
             if attempt < LLM_MAX_RETRIES - 1:
@@ -132,7 +143,7 @@ def _call_single_provider(
                     resp.status_code,
                     attempt + 1,
                 )
-                time.sleep(LLM_RETRY_DELAY)
+                time.sleep(LLM_BACKOFF_BASE * (2**attempt))
                 continue
             raise LLMError(
                 "ALL_PROVIDERS_FAILED",

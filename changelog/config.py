@@ -34,6 +34,18 @@ class Config:
     max_eval_retries: int
     max_tokens: int
 
+    def __repr__(self) -> str:
+        """Redact secrets to prevent accidental exposure in logs."""
+        return (
+            f"Config(repo={self.repo!r}, release_tag={self.release_tag!r}, "
+            f"llm_providers={self.llm_providers!r}, llm_model={self.llm_model!r}, "
+            f"language={self.language!r}, max_commits={self.max_commits}, "
+            f"max_prs={self.max_prs}, max_eval_retries={self.max_eval_retries}, "
+            f"max_tokens={self.max_tokens}, "
+            f"github_token=<REDACTED>, "
+            f"llm_api_keys=<{len(self.llm_api_keys)} REDACTED>)"
+        )
+
     @classmethod
     def from_env(cls) -> Config:
         """Build Config from environment variables injected by action.yml."""
