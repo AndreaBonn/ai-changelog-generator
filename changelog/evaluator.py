@@ -51,7 +51,11 @@ class Evaluator:
                 )
                 evaluation = _parse_evaluation(raw_response)
             except Exception:
-                log.warning("Evaluator failed (attempt %d), keeping current body.", attempt + 1)
+                log.warning(
+                    "Evaluator failed (attempt %d), keeping current body.",
+                    attempt + 1,
+                    exc_info=True,
+                )
                 return changelog_body
 
             if evaluation["ok"]:
@@ -86,7 +90,7 @@ class Evaluator:
             try:
                 changelog_body = call_llm_with_fallback(self._provider_chain, user=regen_prompt)
             except Exception:
-                log.warning("Regeneration failed, keeping previous body.")
+                log.warning("Regeneration failed, keeping previous body.", exc_info=True)
                 return changelog_body
 
         return changelog_body
