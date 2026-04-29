@@ -86,7 +86,7 @@ def _classify_commit_message(message: str) -> str:
     """Classify a commit by its message using conventional commit prefixes."""
     first_line = message.split("\n", 1)[0].strip().lower()
 
-    if "BREAKING CHANGE:" in message or _has_breaking_indicator(first_line):
+    if "BREAKING CHANGE:" in message.upper() or _has_breaking_indicator(first_line):
         return "breaking"
 
     return _classify_by_prefix(first_line)

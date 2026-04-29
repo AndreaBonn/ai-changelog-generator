@@ -49,6 +49,13 @@ class TestBreakingChangeDetection:
         result = classifier.classify([_commit("fix(api)!: change response format")], [])
         assert len(result.breaking) == 1
 
+    def test_breaking_change_keyword_case_insensitive(self) -> None:
+        classifier = Classifier()
+        result = classifier.classify(
+            [_commit("refactor: change API\n\nbreaking change: removed v1")], []
+        )
+        assert len(result.breaking) == 1
+
 
 class TestFeatureDetection:
     def test_feature_via_pr_label(self) -> None:
