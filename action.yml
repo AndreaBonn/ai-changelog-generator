@@ -51,6 +51,11 @@ inputs:
     required: false
     default: '1'
 
+  max_tokens:
+    description: 'Maximum tokens for the LLM response (increase for large releases)'
+    required: false
+    default: '4096'
+
 runs:
   using: 'composite'
   steps:
@@ -77,6 +82,7 @@ runs:
         MAX_COMMITS: ${{ inputs.max_commits }}
         MAX_PRS: ${{ inputs.max_prs }}
         MAX_EVAL_RETRIES: ${{ inputs.max_eval_retries }}
+        MAX_TOKENS: ${{ inputs.max_tokens }}
         REPO_FULL_NAME: ${{ github.repository }}
         RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
         RELEASE_NAME: ${{ github.event.release.name || github.ref_name }}

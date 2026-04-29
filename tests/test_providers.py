@@ -30,7 +30,7 @@ def _make_chain(providers: list[Provider]) -> list[tuple[Provider, str]]:
 class TestGetProvider:
     def test_groq_request_body_structure(self) -> None:
         p = get_provider(name="groq", api_key="key1")
-        body = p.request_builder("sys", "user", p.model, 0.3)
+        body = p.request_builder("sys", "user", p.model, 0.3, p.max_tokens)
         assert body["model"] == "meta-llama/llama-4-scout-17b-16e-instruct"
         assert body["messages"][0]["role"] == "system"
         assert body["messages"][1]["role"] == "user"
@@ -38,7 +38,7 @@ class TestGetProvider:
 
     def test_gemini_request_body_structure(self) -> None:
         p = get_provider(name="gemini", api_key="key1")
-        body = p.request_builder("sys", "user", p.model, 0.3)
+        body = p.request_builder("sys", "user", p.model, 0.3, p.max_tokens)
         assert "system_instruction" in body
         assert body["contents"][0]["role"] == "user"
 
@@ -49,14 +49,14 @@ class TestGetProvider:
 
     def test_anthropic_request_body_structure(self) -> None:
         p = get_provider(name="anthropic", api_key="key1")
-        body = p.request_builder("sys", "user", p.model, 0.3)
+        body = p.request_builder("sys", "user", p.model, 0.3, p.max_tokens)
         assert body["model"] == "claude-sonnet-4-6"
         assert body["system"] == "sys"
         assert body["messages"][0]["role"] == "user"
 
     def test_openai_request_body_structure(self) -> None:
         p = get_provider(name="openai", api_key="key1")
-        body = p.request_builder("sys", "user", p.model, 0.3)
+        body = p.request_builder("sys", "user", p.model, 0.3, p.max_tokens)
         assert body["model"] == "gpt-4.1-mini"
         assert body["messages"][0]["role"] == "system"
 

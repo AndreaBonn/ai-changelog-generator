@@ -59,7 +59,7 @@ def main() -> None:
     provider_chain = []
     for i, (name, key) in enumerate(zip(cfg.llm_providers, cfg.llm_api_keys, strict=True)):
         model = cfg.llm_model if i == 0 else ""
-        provider = get_provider(name=name, api_key=key, model=model)
+        provider = get_provider(name=name, api_key=key, model=model, max_tokens=cfg.max_tokens)
         system_prompt = get_system_prompt()
         provider_chain.append((provider, system_prompt))
 

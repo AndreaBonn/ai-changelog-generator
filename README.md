@@ -68,6 +68,7 @@ All inputs are set in the `with:` block of the action step.
 | `max_commits` | no | `100` | Maximum commits to include in the LLM context |
 | `max_prs` | no | `30` | Maximum merged PRs to include in the LLM context |
 | `max_eval_retries` | no | `1` | Self-evaluation retries (0 disables evaluation) |
+| `max_tokens` | no | `4096` | Maximum tokens for the LLM response (increase for large releases) |
 
 ### Default models per provider
 
@@ -100,7 +101,7 @@ llm_api_key: ${{ secrets.GROQ_KEY }},${{ secrets.GROQ_KEY }},${{ secrets.GEMINI_
 ## Known limitations
 
 - **PR discovery is O(N) on commits**: the action calls the GitHub API once per commit to find associated PRs. On releases with many commits (50+), this can consume a significant portion of the GitHub API rate limit (5,000 requests/hour for authenticated tokens). The `max_commits` and `max_prs` inputs help keep this under control.
-- **LLM output is capped at 2,048 tokens**: releases with a large number of changes may produce truncated changelogs.
+- **LLM output token limit**: the default is 4,096 tokens. Releases with a very large number of changes may produce truncated changelogs. A warning is logged when truncation is detected. Use the `max_tokens` input to increase the limit.
 - **No caching**: every run fetches all data from the GitHub API from scratch.
 
 ## Local development

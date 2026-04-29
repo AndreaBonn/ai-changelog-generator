@@ -68,6 +68,7 @@ Tutti gli input si impostano nel blocco `with:` dello step dell'action.
 | `max_commits` | no | `100` | Numero massimo di commit da includere nel contesto LLM |
 | `max_prs` | no | `30` | Numero massimo di PR mergiati da includere nel contesto LLM |
 | `max_eval_retries` | no | `1` | Tentativi di auto-valutazione (0 disabilita la valutazione) |
+| `max_tokens` | no | `4096` | Token massimi per la risposta LLM (aumentare per release grandi) |
 
 ### Modelli predefiniti per provider
 
@@ -100,7 +101,7 @@ llm_api_key: ${{ secrets.GROQ_KEY }},${{ secrets.GROQ_KEY }},${{ secrets.GEMINI_
 ## Limitazioni note
 
 - **La scoperta delle PR è O(N) sui commit**: l'action chiama le API GitHub una volta per commit per trovare le PR associate. Su release con molti commit (50+), questo può consumare una porzione significativa del rate limit delle API GitHub (5.000 richieste/ora per token autenticati). Gli input `max_commits` e `max_prs` aiutano a tenere il consumo sotto controllo.
-- **L'output LLM è limitato a 2.048 token**: release con molte modifiche possono produrre changelog troncati.
+- **Limite token output LLM**: il default è 4.096 token. Release con un numero molto elevato di modifiche possono produrre changelog troncati. Un warning viene loggato quando viene rilevato il troncamento. Usa l'input `max_tokens` per aumentare il limite.
 - **Nessun caching**: ogni esecuzione recupera tutti i dati dalle API GitHub da zero.
 
 ## Sviluppo locale

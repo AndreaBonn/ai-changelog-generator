@@ -32,6 +32,7 @@ class Config:
     max_commits: int
     max_prs: int
     max_eval_retries: int
+    max_tokens: int
 
     @classmethod
     def from_env(cls) -> Config:
@@ -78,6 +79,7 @@ class Config:
         max_commits = _parse_positive_int("MAX_COMMITS", default=100)
         max_prs = _parse_positive_int("MAX_PRS", default=30)
         max_eval_retries = _parse_non_negative_int("MAX_EVAL_RETRIES", default=1)
+        max_tokens = _parse_positive_int("MAX_TOKENS", default=4096)
 
         return cls(
             repo=repo,
@@ -95,6 +97,7 @@ class Config:
             max_commits=max_commits,
             max_prs=max_prs,
             max_eval_retries=max_eval_retries,
+            max_tokens=max_tokens,
         )
 
 
