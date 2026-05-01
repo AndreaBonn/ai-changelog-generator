@@ -4,9 +4,14 @@
 
 GitHub Action that generates structured changelogs when you publish a release. It fetches commits and merged PRs between two tags, classifies them using conventional commit conventions, and produces a Markdown changelog via LLM.
 
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-AI%20Changelog%20Generator-blue?logo=github)](https://github.com/marketplace/actions/ai-changelog-generator-by-bonn)
 [![CI](https://github.com/AndreaBonn/ai-changelog-generator/actions/workflows/test.yml/badge.svg)](https://github.com/AndreaBonn/ai-changelog-generator/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+
+## Example output
+
+<img src="assets/example-output.png" alt="Example changelog output" width="700">
 
 ## How it works
 
@@ -25,6 +30,19 @@ GitHub Action that generates structured changelogs when you publish a release. I
 - Heuristic classifier for conventional commits and PR labels
 - Changelog output in 5 languages: English, Italian, French, Spanish, German
 - Optional prepend to `CHANGELOG.md` with `[skip ci]` commit
+
+## Prerequisites
+
+You need an API key from at least one LLM provider:
+
+| Provider | Get your API key | Free tier |
+|---|---|---|
+| Groq (default) | [console.groq.com](https://console.groq.com) | Yes |
+| Google Gemini | [aistudio.google.com](https://aistudio.google.com/apikey) | Yes |
+| Anthropic | [console.anthropic.com](https://console.anthropic.com) | No |
+| OpenAI | [platform.openai.com](https://platform.openai.com/api-keys) | No |
+
+Once you have your key, add it as a repository secret: **Settings → Secrets and variables → Actions → New repository secret**, named `LLM_API_KEY`.
 
 ## Quick start
 

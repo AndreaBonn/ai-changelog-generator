@@ -16,10 +16,16 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - name: Create and push tag
+      - name: Create and push version tag
         run: |
           git tag ${{ inputs.version }}
           git push origin ${{ inputs.version }}
+
+      - name: Update major version tag
+        run: |
+          MAJOR=$(echo "${{ inputs.version }}" | grep -oP '^v\d+')
+          git tag -fa "${MAJOR}" -m "Release ${MAJOR} -> ${{ inputs.version }}"
+          git push origin "${MAJOR}" --force
 
       - name: Create GitHub Release
         env:
