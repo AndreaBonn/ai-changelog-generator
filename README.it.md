@@ -30,6 +30,41 @@ GitHub Action che genera changelog strutturati quando si pubblica una release. R
 5. Opzionalmente esegue un ciclo di auto-valutazione: l'LLM verifica il proprio output per breaking change mancanti o elementi inventati, e rigenera se necessario.
 6. Pubblica il risultato come body della GitHub Release, e opzionalmente lo committa in `CHANGELOG.md`.
 
+### Architettura
+
+```mermaid
+graph LR
+  env["Variabili d'ambiente"] --> config["config.py<br/>Config.from_env()"]
+  config --> gen["generate.py<br/>Orchestratore"]
+
+  gen --> gh_client["github_client.py<br/>Client REST API"]
+  gh_client --> gh_api["GitHub API"]
+
+  gen --> classifier["classifier.py<br/>Classificatore Euristico"]
+
+  gen --> prompt["prompt.py<br/>Generatore Prompt"]
+  prompt --> providers["providers.py<br/>Catena Fallback LLM"]
+  providers --> llm_apis["API LLM<br/>Groq / Gemini / Anthropic / OpenAI"]
+
+  gen --> evaluator["evaluator.py<br/>Ciclo Auto-Valutazione"]
+  evaluator --> providers
+
+  gen --> publisher["publisher.py<br/>Pubblicatore Release"]
+  publisher --> gh_client
+
+  classDef core fill:#2563eb,stroke:#1d4ed8,color:#fff
+  classDef data fill:#d97706,stroke:#b45309,color:#fff
+  classDef ext fill:#6b7280,stroke:#4b5563,color:#fff
+  classDef engine fill:#059669,stroke:#047857,color:#fff
+
+  class config,gen core
+  class gh_client,classifier data
+  class prompt,providers,evaluator engine
+  class env,gh_api,llm_apis,publisher ext
+```
+
+Per diagrammi dettagliati (sequenza pipeline, fallback provider, ciclo di auto-valutazione), vedi [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Funzionalità
 
 - Quattro provider LLM: Groq, Google Gemini, Anthropic, OpenAI
